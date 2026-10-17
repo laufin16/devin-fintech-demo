@@ -9,6 +9,10 @@ import {
   getCaseDocuments,
   getCaseHistory,
   getCaseNotes,
+  isOpen,
+  listHelpColleagues,
+  listHelpRequests,
+  MAX_HELP_NOTE_LENGTH,
   kycActionItemFor,
   kycWaitingText,
   slaState,
@@ -18,6 +22,7 @@ import { can } from "@/lib/policy";
 import { listRefunds, payoutBlockedReason } from "@/lib/refunds";
 import { RiskBadge, StatusBadge } from "@/components/status-badge";
 import { KycActions } from "../kyc-actions";
+import { HelpRequestForm } from "../help-request";
 
 const CHECK_STYLES = {
   pass: "text-emerald-700",
@@ -54,6 +59,9 @@ export default async function KycCasePage({ params }: { params: Promise<{ id: st
   const documents = getCaseDocuments(db, user, kyc.id);
   const notes = getCaseNotes(db, user, kyc.id);
   const history = can(user, "kyc:view_history") ? getCaseHistory(db, user, kyc.id) : [];
+  const canAskForHelp = can(user, "kyc:request_help") && isOpen(kyc.status);
+  const colleagues = canAskForHelp ? listHelpColleagues(db, user) : [];
+  const helpRequests = listHelpRequests(db, user, kyc.id);
   const refunds = can(user, "refund:view") ? listRefunds(db, user, { customerId: kyc.customerId }) : [];
 
   return (
@@ -131,6 +139,26 @@ export default async function KycCasePage({ params }: { params: Promise<{ id: st
               <p className="text-sm text-slate-500">{kycWaitingText(kyc)}</p>
             )}
           </section>
+
+          {(canAskForHelp || helpRequests.length > 0) && (
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="mb-1 font-medium">Ask for help</h2>
+              <p className="mb-3 text-xs text-slate-500">Sends a Slack DM with a link to this case. Mocked for the prototype.</p>
+              {canAskForHelp && <HelpRequestForm caseId={kyc.id} colleagues={colleagues} maxLength={MAX_HELP_NOTE_LENGTH} />}
+              {helpRequests.length > 0 && (
+                <ol className="mt-4 space-y-3 text-sm">
+                  {helpRequests.map((m) => (
+                    <li key={m.id} className="border-l-2 border-[#4A154B]/30 pl-3">
+                      <div className="text-xs text-slate-500">
+                        {m.senderName} → {m.recipientName} · {new Date(m.createdAt).toLocaleString("en-US")}
+                      </div>
+                      <div className="whitespace-pre-wrap">{m.text}</div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+          )}
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 font-medium">Customer</h2>

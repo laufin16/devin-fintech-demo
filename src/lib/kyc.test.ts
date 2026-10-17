@@ -8,9 +8,12 @@ import {
   getCase,
   kycActionItemFor,
   listCases,
+  listHelpColleagues,
+  listHelpRequests,
   listKycAssignments,
   releaseCase,
   requestInfo,
+  requestKycHelp,
 } from "./kyc";
 import type { User } from "./types";
 
@@ -156,5 +159,57 @@ describe("review actions", () => {
     expect(() => decideCase(db, ava, { ...input("kyc_2006"), decision: "approve", reason: "ok" })).toThrow(/audit down/);
     expect(getCase(db, ava, "kyc_2006").status).toBe("in_review");
     expect((db.prepare("SELECT COUNT(*) AS n FROM kyc_notes").get() as { n: number }).n).toBe(notes);
+  });
+});
+
+describe("ask for help (mock Slack)", () => {
+  const help = (user: User, overrides: Partial<{ caseId: string; recipientId: string; note: string }> = {}) =>
+    requestKycHelp(db, user, { caseId: "kyc_2004", recipientId: "u_sam", note: "Sanctions hit looks odd", requestId: "req-h", ...overrides });
+
+  it("lists every other user who can review KYC as a colleague", () => {
+    expect(listHelpColleagues(db, ava).map((c) => c.id).sort()).toEqual(["u_ben", "u_sam"]);
+  });
+
+  it("records the message and its audit row in one transaction, without PII or the note in the audit", () => {
+    const before = auditCount();
+    const msg = help(ava);
+    expect(msg.recipientName).toBe("Sam Admin");
+    expect(msg.text).toContain("kyc_2004");
+    expect(msg.text).toContain("/kyc/kyc_2004");
+    const raw = getCase(db, sam, "kyc_2004").pii;
+    for (const v of [raw.dateOfBirth, raw.nationalId, raw.addressLine]) expect(msg.text).not.toContain(v);
+    expect(auditCount()).toBe(before + 1);
+    const audit = lastAudit();
+    expect(audit.action).toBe("kyc.request_help");
+    expect(JSON.parse(audit.after_json)).toEqual({ slackMessageId: msg.id, recipientId: "u_sam", channel: "slack_dm_mock" });
+    expect(audit.after_json).not.toContain("Sanctions");
+    expect(listHelpRequests(db, ben, "kyc_2004")).toHaveLength(1);
+  });
+
+  it("does not change the case", () => {
+    const v = version("kyc_2004");
+    help(ava);
+    expect(version("kyc_2004")).toBe(v);
+  });
+
+  it("validates the note, recipient and case", () => {
+    expect(() => help(ava, { note: "  " })).toThrow(ValidationError);
+    expect(() => help(ava, { note: "x".repeat(501) })).toThrow(ValidationError);
+    expect(() => help(ava, { recipientId: "u_ava" })).toThrow(ValidationError);
+    expect(() => help(ava, { recipientId: "u_nobody" })).toThrow(ValidationError);
+    expect(() => help(ava, { caseId: "kyc_2001" })).toThrow(ConflictError);
+    expect(listHelpRequests(db, sam, "kyc_2004")).toHaveLength(0);
+  });
+
+  it("keeps slack_messages append-only", () => {
+    help(ava);
+    expect(() => db.prepare("UPDATE slack_messages SET text = 'x'").run()).toThrow(/append-only/);
+    expect(() => db.prepare("DELETE FROM slack_messages").run()).toThrow(/append-only/);
+  });
+
+  it("rolls the message back if the audit write fails", () => {
+    db.exec("CREATE TRIGGER fail_audit BEFORE INSERT ON audit_log BEGIN SELECT RAISE(ABORT, 'audit down'); END;");
+    expect(() => help(ava)).toThrow(/audit down/);
+    expect(listHelpRequests(db, sam, "kyc_2004")).toHaveLength(0);
   });
 });

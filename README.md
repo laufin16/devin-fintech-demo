@@ -42,6 +42,7 @@ Mock accounts (password `demo1234`):
 - Escalated cases are decided by admins (`kyc:decide_escalated`). There is no second reviewer for the prototype.
 - Only admins (`kyc:view_pii`) see the full date of birth, national ID and street address; everyone else gets masked values from the server. Audit rows never contain PII.
 - A refund payout requires the customer's latest KYC case to be approved. `processRefund` checks this inside the payout transaction.
+- "Ask for help" on an open case sends a coworker a Slack DM (`kyc:request_help`). Slack is mocked: messages go to the append-only `slack_messages` table and show on the case page. The message has the case id, status, risk, link and the sender's note, but no PII; the audit row stores only the message id.
 
 ## Authentication behavior
 

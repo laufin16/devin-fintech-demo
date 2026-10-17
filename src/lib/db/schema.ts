@@ -1,5 +1,5 @@
 // Money is always stored as INTEGER minor units (cents).
-// audit_log, ledger_transactions, ledger_entries and kyc_notes are append-only, enforced by triggers.
+// audit_log, ledger_transactions, ledger_entries, kyc_notes and slack_messages are append-only, enforced by triggers.
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
@@ -115,6 +115,18 @@ CREATE TABLE IF NOT EXISTS kyc_notes (
 );
 CREATE INDEX IF NOT EXISTS kyc_notes_case ON kyc_notes(case_id);
 
+-- Mock Slack outbox: messages are recorded here instead of being sent to a real workspace.
+CREATE TABLE IF NOT EXISTS slack_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sender_id TEXT NOT NULL REFERENCES users(id),
+  recipient_id TEXT NOT NULL REFERENCES users(id),
+  resource_type TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS slack_messages_resource ON slack_messages(resource_type, resource_id);
+
 CREATE TABLE IF NOT EXISTS idempotency_keys (
   key TEXT PRIMARY KEY,
   actor_id TEXT NOT NULL REFERENCES users(id),
@@ -147,6 +159,10 @@ CREATE TRIGGER IF NOT EXISTS kyc_notes_no_update BEFORE UPDATE ON kyc_notes
 BEGIN SELECT RAISE(ABORT, 'kyc_notes is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS kyc_notes_no_delete BEFORE DELETE ON kyc_notes
 BEGIN SELECT RAISE(ABORT, 'kyc_notes is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS slack_messages_no_update BEFORE UPDATE ON slack_messages
+BEGIN SELECT RAISE(ABORT, 'slack_messages is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS slack_messages_no_delete BEFORE DELETE ON slack_messages
+BEGIN SELECT RAISE(ABORT, 'slack_messages is append-only'); END;
 
 CREATE TRIGGER IF NOT EXISTS ledger_transactions_no_update BEFORE UPDATE ON ledger_transactions
 BEGIN SELECT RAISE(ABORT, 'ledger is append-only'); END;

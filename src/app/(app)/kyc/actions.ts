@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import { requireActionContext } from "@/lib/auth/current";
 import { actionErrorState, type ActionState } from "@/lib/action-state";
-import { claimCase, decideCase, escalateCase, releaseCase, requestInfo } from "@/lib/kyc";
+import { claimCase, decideCase, escalateCase, releaseCase, requestInfo, requestKycHelp } from "@/lib/kyc";
 
 export async function kycAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const { user, requestId } = await requireActionContext();
@@ -50,4 +50,21 @@ export async function kycAction(_prev: ActionState, formData: FormData): Promise
 
   revalidatePath("/", "layout");
   return { message };
+}
+
+export async function requestHelpAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { user, requestId } = await requireActionContext();
+  let recipientName: string;
+  try {
+    recipientName = requestKycHelp(getDb(), user, {
+      caseId: String(formData.get("caseId") ?? ""),
+      recipientId: String(formData.get("recipientId") ?? ""),
+      note: String(formData.get("note") ?? ""),
+      requestId,
+    }).recipientName;
+  } catch (err) {
+    return actionErrorState(err, requestId, "requestHelpAction");
+  }
+  revalidatePath("/kyc", "layout");
+  return { message: `Slack message sent to ${recipientName} (mock)` };
 }

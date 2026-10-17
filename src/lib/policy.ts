@@ -20,6 +20,7 @@ export const ACTIONS = [
   "kyc:reject",
   "kyc:decide_escalated",
   "kyc:view_pii",
+  "kyc:request_help",
 ] as const;
 
 export type Action = (typeof ACTIONS)[number];
@@ -32,6 +33,7 @@ const KYC_REVIEW: readonly Action[] = [
   "kyc:escalate",
   "kyc:approve",
   "kyc:reject",
+  "kyc:request_help",
 ];
 
 const POLICY: Record<Role, readonly Action[]> = {
