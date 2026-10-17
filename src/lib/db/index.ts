@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { writeAudit } from "../audit";
+import { seedKyc } from "./kyc-seed";
 import { SCHEMA_SQL } from "./schema";
 import { seed } from "./seed";
 
@@ -19,6 +20,8 @@ export function createDb(file: string): DB {
   migrate(db);
   const { n } = db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
   if (n === 0) seed(db);
+  const { k } = db.prepare("SELECT COUNT(*) AS k FROM kyc_cases").get() as { k: number };
+  if (k === 0) db.transaction(() => seedKyc(db, `seed-kyc-${randomUUID()}`))();
   return db;
 }
 

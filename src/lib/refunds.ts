@@ -2,10 +2,10 @@ import type { DB } from "./db";
 import { nowIso } from "./db";
 import { readAuditForResource, writeAudit, type AuditRow } from "./audit";
 import { REFUND_RESERVE_ACCOUNT, customerAccountId } from "./db/seed";
-import { ConflictError, NotFoundError } from "./errors";
+import { ConflictError, NotFoundError, PayoutBlockedError } from "./errors";
 import { postLedgerTransaction, readLedgerEntries, type LedgerEntryRow } from "./ledger";
 import { authorize, can } from "./policy";
-import type { RefundStatus, User } from "./types";
+import type { KycStatus, RefundStatus, User } from "./types";
 
 export interface RefundRow {
   id: string;
@@ -22,6 +22,8 @@ export interface RefundRow {
   decided_by_name: string | null;
   processed_by_name: string | null;
   ledger_txn_id: string | null;
+  kyc_status: KycStatus | null;
+  kyc_case_id: string | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -34,9 +36,13 @@ export interface ActionItem {
   intents: RefundIntent[];
 }
 
+// The customer's KYC status comes from their most recent KYC case.
+const LATEST_KYC = `FROM kyc_cases k WHERE k.customer_id = r.customer_id ORDER BY k.created_at DESC, k.rowid DESC LIMIT 1`;
+
 const SELECT_REFUND = `
   SELECT r.*, c.name AS customer_name, c.email AS customer_email,
-         a.name AS assignee_name, d.name AS decided_by_name, p.name AS processed_by_name
+         a.name AS assignee_name, d.name AS decided_by_name, p.name AS processed_by_name,
+         (SELECT k.status ${LATEST_KYC}) AS kyc_status, (SELECT k.id ${LATEST_KYC}) AS kyc_case_id
   FROM refunds r
   JOIN customers c ON c.id = r.customer_id
   LEFT JOIN users a ON a.id = r.assignee_id
@@ -57,28 +63,48 @@ function snapshot(r: RefundRow) {
     decidedBy: r.decided_by_name,
     processedBy: r.processed_by_name,
     ledgerTxnId: r.ledger_txn_id,
+    kycStatus: r.kyc_status,
   };
 }
 
-export function actionItemFor(user: User, refund: Pick<RefundRow, "status">): ActionItem | null {
+// Why an approved refund cannot be paid out yet, or null if nothing blocks it.
+export function payoutBlockedReason(refund: Pick<RefundRow, "status" | "kyc_status">): string | null {
+  if (refund.status !== "approved" || refund.kyc_status === "approved") return null;
+  return refund.kyc_status
+    ? `Payout blocked: customer KYC is ${refund.kyc_status.replace("_", " ")}, not approved`
+    : "Payout blocked: customer has no KYC on file";
+}
+
+export function actionItemFor(user: User, refund: Pick<RefundRow, "status" | "kyc_status">): ActionItem | null {
   if (refund.status === "pending") {
     const intents = (["approve", "reject"] as const).filter((i) => can(user, `refund:${i}`));
     return intents.length ? { label: "Review refund request", intents } : null;
   }
-  if (refund.status === "approved" && can(user, "refund:process")) {
+  if (refund.status === "approved" && can(user, "refund:process") && !payoutBlockedReason(refund)) {
     return { label: "Issue refund payout", intents: ["process"] };
   }
   return null;
 }
 
-export function listRefunds(db: DB, user: User, filter: { status?: RefundStatus } = {}): RefundRow[] {
+export function listRefunds(
+  db: DB,
+  user: User,
+  filter: { status?: RefundStatus; customerId?: string } = {},
+): RefundRow[] {
   authorize(user, "refund:view");
+  const where: string[] = [];
+  const args: string[] = [];
   if (filter.status) {
-    return db
-      .prepare(`${SELECT_REFUND} WHERE r.status = ? ORDER BY r.created_at DESC`)
-      .all(filter.status) as RefundRow[];
+    where.push("r.status = ?");
+    args.push(filter.status);
   }
-  return db.prepare(`${SELECT_REFUND} ORDER BY r.created_at DESC`).all() as RefundRow[];
+  if (filter.customerId) {
+    where.push("r.customer_id = ?");
+    args.push(filter.customerId);
+  }
+  return db
+    .prepare(`${SELECT_REFUND} ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY r.created_at DESC`)
+    .all(...args) as RefundRow[];
 }
 
 export function countRefundsByStatus(db: DB, user: User): Record<RefundStatus, number> {
@@ -157,7 +183,8 @@ export interface ProcessResult {
 }
 
 // Money-moving: idempotent, atomic (ledger + refund + audit), version-checked, and serialized
-// with BEGIN IMMEDIATE so concurrent payouts cannot overdraw the reserve.
+// with BEGIN IMMEDIATE so concurrent payouts cannot overdraw the reserve. The customer's KYC status
+// is read inside the same transaction, so a concurrent KYC decision cannot slip past the gate.
 export function processRefund(
   db: DB,
   user: User,
@@ -182,6 +209,8 @@ export function processRefund(
       if (before.version !== input.expectedVersion) {
         throw new ConflictError("Refund was changed by someone else. Reload and try again.");
       }
+      const blocked = payoutBlockedReason(before);
+      if (blocked) throw new PayoutBlockedError(blocked);
 
       const ledgerTxnId = postLedgerTransaction(db, {
         description: `Refund ${before.id} payout`,

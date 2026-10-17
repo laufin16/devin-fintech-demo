@@ -17,6 +17,13 @@ export const TOOLS: Tool[] = [
     requires: "refund:view",
   },
   {
+    href: "/kyc",
+    name: "KYC review queue",
+    navLabel: "KYC",
+    description: "Claim and review customer identity checks. Refund payouts need an approved KYC.",
+    requires: "kyc:view",
+  },
+  {
     href: "/audit",
     name: "Audit log",
     navLabel: "Audit log",
