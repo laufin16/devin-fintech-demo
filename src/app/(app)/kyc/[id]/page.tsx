@@ -59,7 +59,7 @@ export default async function KycCasePage({ params }: { params: Promise<{ id: st
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/kyc" className="text-sm text-indigo-600 hover:underline">← KYC review queue</Link>
+        <Link href="/kyc" className="text-sm text-indigo-600 hover:underline">← KYC Review Queue</Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1 className="font-mono text-2xl font-semibold">{kyc.id}</h1>
           <StatusBadge status={kyc.status} />

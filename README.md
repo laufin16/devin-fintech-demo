@@ -32,10 +32,10 @@ Mock accounts (password `demo1234`):
 - `src/lib/audit.ts`: append-only audit log, written inside the same transaction as each change
 - `src/lib/ledger.ts`: double-entry ledger (signed integer cents, each transaction sums to zero)
 - `src/lib/refunds.ts`: refund queries, approve/reject, and the idempotent `processRefund` payout
-- `src/lib/kyc.ts`: KYC review queue (claim, release, request info, escalate, approve/reject) and PII masking
+- `src/lib/kyc.ts`: KYC Review Queue (claim, release, request info, escalate, approve/reject) and PII masking
 - `src/lib/tools.ts`: tool registry; the nav and home page are built from it
 
-## KYC review queue
+## KYC Review Queue
 
 - `/kyc` lists cases with open ones first, sorted by SLA deadline and then risk. `/kyc/[id]` shows identity, checks, documents, notes and history. `GET /api/kyc?status=&mine=1` returns the same list.
 - A reviewer claims a case (`in_review`), then approves, rejects, requests info (`needs_info`) or escalates. Every action except claim/release needs a reason, stored in the append-only `kyc_notes` table. Only the reviewer who claimed a case can act on it.

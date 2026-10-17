@@ -39,7 +39,7 @@ export default async function RefundDetailPage({ params }: { params: Promise<{ i
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/refunds" className="text-sm text-indigo-600 hover:underline">← Refund dashboard</Link>
+        <Link href="/refunds" className="text-sm text-indigo-600 hover:underline">← Refund Dashboard</Link>
         <div className="mt-2 flex items-center gap-3">
           <h1 className="font-mono text-2xl font-semibold">{refund.id}</h1>
           <StatusBadge status={refund.status} />
