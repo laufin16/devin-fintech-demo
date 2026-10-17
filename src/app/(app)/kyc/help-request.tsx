@@ -23,7 +23,7 @@ export function HelpRequestForm({ caseId, colleagues, maxLength }: { caseId: str
         defaultValue=""
         className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
       >
-        <option value="" disabled>Choose a coworker</option>
+        <option value="">Choose a coworker</option>
         {colleagues.map((c) => (
           <option key={c.id} value={c.id}>{c.name} ({c.role})</option>
         ))}
