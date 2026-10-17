@@ -36,7 +36,9 @@ export async function refundAction(_prev: RefundActionState, formData: FormData)
     }
   } catch (err) {
     if (err instanceof AppError) return { error: err.message };
-    throw err;
+    // Each refund mutation runs in a single transaction, so a throw here means it rolled back.
+    console.error(`refundAction failed (request ${requestId})`, err);
+    return { error: `Something went wrong (request ${requestId.slice(0, 8)}). No changes were saved.` };
   }
 
   revalidatePath("/", "layout");

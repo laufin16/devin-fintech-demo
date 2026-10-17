@@ -1,14 +1,13 @@
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth/current";
+import { requirePermission } from "@/lib/auth/current";
 import { getDb } from "@/lib/db";
 import { NotFoundError } from "@/lib/errors";
 import { formatCents } from "@/lib/money";
 import { can } from "@/lib/policy";
 import { actionItemFor, getRefund, getRefundHistory, getRefundLedgerEntries } from "@/lib/refunds";
 import { StatusBadge } from "@/components/status-badge";
-import { Forbidden } from "@/components/forbidden";
 import { RefundActions } from "../refund-actions";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -21,8 +20,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export default async function RefundDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser();
-  if (!can(user, "refund:view")) return <Forbidden />;
+  const user = await requirePermission("refund:view");
   const { id } = await params;
   const db = getDb();
 

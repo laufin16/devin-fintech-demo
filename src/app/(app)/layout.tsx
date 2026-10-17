@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/current";
 import { can } from "@/lib/policy";
-import { logoutAction } from "../actions";
+import { logoutAction, logoutEverywhereAction } from "../actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -23,6 +23,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">{user.role}</span>
             <form action={logoutAction}>
               <button className="rounded-md border border-slate-300 px-3 py-1 text-slate-700 hover:bg-slate-50">Sign out</button>
+            </form>
+            <form action={logoutEverywhereAction}>
+              <button className="text-xs text-slate-500 hover:text-slate-900 hover:underline">Sign out everywhere</button>
             </form>
           </div>
         </div>

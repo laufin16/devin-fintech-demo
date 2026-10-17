@@ -1,13 +1,9 @@
-import { requireUser } from "@/lib/auth/current";
+import { requirePermission } from "@/lib/auth/current";
 import { getDb } from "@/lib/db";
 import { readRecentAudit } from "@/lib/audit";
-import { authorize, can } from "@/lib/policy";
-import { Forbidden } from "@/components/forbidden";
 
 export default async function AuditPage() {
-  const user = await requireUser();
-  if (!can(user, "audit:view")) return <Forbidden />;
-  authorize(user, "audit:view");
+  await requirePermission("audit:view");
   const rows = readRecentAudit(getDb());
 
   return (
