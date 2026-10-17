@@ -6,7 +6,7 @@ import { getDb } from "@/lib/db";
 import { NotFoundError } from "@/lib/errors";
 import { formatCents } from "@/lib/money";
 import { can } from "@/lib/policy";
-import { actionItemFor, getRefund, getRefundHistory, getRefundLedgerEntries } from "@/lib/refunds";
+import { actionItemFor, getRefund, getRefundHistory, getRefundLedgerEntries, payoutBlockedReason } from "@/lib/refunds";
 import { StatusBadge } from "@/components/status-badge";
 import { RefundActions } from "../refund-actions";
 
@@ -67,6 +67,15 @@ export default async function RefundDetailPage({ params }: { params: Promise<{ i
             <p className="text-sm">{refund.customer_name}</p>
             <p className="text-sm text-slate-500">{refund.customer_email}</p>
             <p className="mt-1 font-mono text-xs text-slate-400">{refund.customer_id}</p>
+            <div className="mt-3 flex items-center gap-2 text-sm">
+              <span className="text-xs uppercase text-slate-500">KYC</span>
+              {refund.kyc_status ? <StatusBadge status={refund.kyc_status} /> : <span className="text-slate-500">None on file</span>}
+              {refund.kyc_case_id && can(user, "kyc:view") && (
+                <Link href={`/kyc/${refund.kyc_case_id}`} className="text-xs text-indigo-600 hover:underline">
+                  {refund.kyc_case_id}
+                </Link>
+              )}
+            </div>
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 font-medium">Action item</h2>
@@ -79,6 +88,8 @@ export default async function RefundDetailPage({ params }: { params: Promise<{ i
                 intents={item.intents}
                 amountLabel={amount}
               />
+            ) : payoutBlockedReason(refund) ? (
+              <p className="text-sm text-amber-700">{payoutBlockedReason(refund)}.</p>
             ) : (
               <p className="text-sm text-slate-500">
                 {refund.status === "approved" ? "Awaiting payout by an admin." : "No action needed."}

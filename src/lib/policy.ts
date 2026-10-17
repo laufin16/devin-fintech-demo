@@ -11,12 +11,31 @@ export const ACTIONS = [
   "refund:reject",
   "refund:process",
   "audit:view",
+  "kyc:view",
+  "kyc:view_history",
+  "kyc:claim",
+  "kyc:request_info",
+  "kyc:escalate",
+  "kyc:approve",
+  "kyc:reject",
+  "kyc:decide_escalated",
+  "kyc:view_pii",
 ] as const;
 
 export type Action = (typeof ACTIONS)[number];
 
+const KYC_REVIEW: readonly Action[] = [
+  "kyc:view",
+  "kyc:view_history",
+  "kyc:claim",
+  "kyc:request_info",
+  "kyc:escalate",
+  "kyc:approve",
+  "kyc:reject",
+];
+
 const POLICY: Record<Role, readonly Action[]> = {
-  approver: ["tools:view", "refund:view", "refund:view_history", "refund:approve", "refund:reject"],
+  approver: ["tools:view", "refund:view", "refund:view_history", "refund:approve", "refund:reject", ...KYC_REVIEW],
   admin: [
     "tools:view",
     "refund:view",
@@ -25,6 +44,10 @@ const POLICY: Record<Role, readonly Action[]> = {
     "refund:reject",
     "refund:process",
     "audit:view",
+    ...KYC_REVIEW,
+    // Escalated KYC cases are decided by admins; only admins see unmasked PII (AGENTS.md).
+    "kyc:decide_escalated",
+    "kyc:view_pii",
   ],
 };
 

@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createDb, type DB } from "./db";
 import { REFUND_RESERVE_ACCOUNT, customerAccountId } from "./db/seed";
 import { writeAudit } from "./audit";
-import { ConflictError, ForbiddenError, InsufficientFundsError } from "./errors";
+import { ConflictError, ForbiddenError, InsufficientFundsError, PayoutBlockedError } from "./errors";
 import { accountBalance } from "./ledger";
+import { claimCase, decideCase } from "./kyc";
 import { actionItemFor, decideRefund, getRefund, processRefund } from "./refunds";
 import type { User } from "./types";
 
@@ -134,9 +135,50 @@ describe("processRefund", () => {
 
 describe("actionItemFor", () => {
   it("offers approve/reject on pending and payout only to admins on approved", () => {
-    expect(actionItemFor(ava, { status: "pending" })?.intents).toEqual(["approve", "reject"]);
-    expect(actionItemFor(ava, { status: "approved" })).toBeNull();
-    expect(actionItemFor(sam, { status: "approved" })?.intents).toEqual(["process"]);
-    expect(actionItemFor(sam, { status: "processed" })).toBeNull();
+    expect(actionItemFor(ava, { status: "pending", kyc_status: "approved" })?.intents).toEqual(["approve", "reject"]);
+    expect(actionItemFor(ava, { status: "approved", kyc_status: "approved" })).toBeNull();
+    expect(actionItemFor(sam, { status: "approved", kyc_status: "approved" })?.intents).toEqual(["process"]);
+    expect(actionItemFor(sam, { status: "processed", kyc_status: "approved" })).toBeNull();
+  });
+});
+
+describe("KYC gate on payouts", () => {
+  const approveRefund = () =>
+    decideRefund(db, ava, { refundId: "rf_1004", decision: "approve", expectedVersion: 1, requestId: "r" });
+  const payout = (version: number) =>
+    processRefund(db, sam, { refundId: "rf_1004", expectedVersion: version, idempotencyKey: `k-${version}`, requestId: "r" });
+
+  it("blocks payouts until the customer's KYC is approved, without moving money", () => {
+    const refund = approveRefund();
+    expect(refund.kyc_status).toBe("pending");
+    expect(actionItemFor(sam, refund)).toBeNull();
+    const txns = ledgerTxnCount();
+    const audits = auditCount();
+    expect(() => payout(refund.version)).toThrow(PayoutBlockedError);
+    expect(ledgerTxnCount()).toBe(txns);
+    expect(auditCount()).toBe(audits);
+    expect(getRefund(db, sam, "rf_1004").status).toBe("approved");
+  });
+
+  it("allows the payout once KYC is approved", () => {
+    const refund = approveRefund();
+    const kyc = claimCase(db, ava, { caseId: "kyc_2004", expectedVersion: 1, requestId: "r" });
+    decideCase(db, ava, { caseId: "kyc_2004", expectedVersion: kyc.version, decision: "approve", reason: "False positive", requestId: "r" });
+    expect(actionItemFor(sam, getRefund(db, sam, "rf_1004"))?.intents).toEqual(["process"]);
+    expect(payout(refund.version).replayed).toBe(false);
+    expect(getRefund(db, sam, "rf_1004").status).toBe("processed");
+  });
+
+  it("blocks customers with no KYC on file", () => {
+    db.prepare(
+      `INSERT INTO customers (id, name, email) VALUES ('c_new', 'New', 'new@example.com')`,
+    ).run();
+    db.prepare(
+      `INSERT INTO refunds (id, customer_id, order_ref, amount_cents, reason, status, version, created_at, updated_at)
+       VALUES ('rf_new', 'c_new', 'ORD-N', 100, 'test', 'approved', 1, '2026-01-01', '2026-01-01')`,
+    ).run();
+    expect(() =>
+      processRefund(db, sam, { refundId: "rf_new", expectedVersion: 1, idempotencyKey: "k-new", requestId: "r" }),
+    ).toThrow(/no KYC on file/);
   });
 });

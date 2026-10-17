@@ -37,3 +37,15 @@ export class InsufficientFundsError extends AppError {
     super(message, 422);
   }
 }
+
+export class ValidationError extends AppError {
+  constructor(message: string) {
+    super(message, 400);
+  }
+}
+
+export class PayoutBlockedError extends AppError {
+  constructor(message: string) {
+    super(message, 422);
+  }
+}
