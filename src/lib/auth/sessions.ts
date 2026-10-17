@@ -15,6 +15,9 @@ import { hashPassword, verifyPassword } from "./password";
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 const isoAgo = (ms: number) => new Date(Date.now() - ms).toISOString();
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
+// last_seen_at can lag real activity by up to SESSION_TOUCH_INTERVAL_MS, so the cutoff includes it:
+// a session is never expired before SESSION_IDLE_TIMEOUT_MS of real inactivity.
+const idleCutoff = () => isoAgo(SESSION_IDLE_TIMEOUT_MS + SESSION_TOUCH_INTERVAL_MS);
 
 // Verified against when the email is unknown, so both paths cost one scrypt and take the same time.
 const DUMMY_CREDENTIAL = hashPassword(randomBytes(16).toString("hex"));
@@ -97,7 +100,7 @@ export function createSession(db: DB, userId: string, requestId: string): { toke
         `SELECT id FROM sessions WHERE user_id = ?
            AND (revoked_at IS NOT NULL OR expires_at <= ? OR last_seen_at <= ?)`,
       )
-      .all(userId, now, isoAgo(SESSION_IDLE_TIMEOUT_MS)) as { id: string }[];
+      .all(userId, now, idleCutoff()) as { id: string }[];
     if (stale.length > 0) {
       const del = db.prepare("DELETE FROM sessions WHERE id = ?");
       for (const s of stale) del.run(s.id);
@@ -140,7 +143,7 @@ function lookupSession(db: DB, token: string): SessionRow | undefined {
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.id = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND s.last_seen_at > ?`,
     )
-    .get(hashToken(token), nowIso(), isoAgo(SESSION_IDLE_TIMEOUT_MS)) as SessionRow | undefined;
+    .get(hashToken(token), nowIso(), idleCutoff()) as SessionRow | undefined;
 }
 
 const toUser = (r: SessionRow): User => ({ id: r.id, email: r.email, name: r.name, role: r.role });
@@ -155,25 +158,32 @@ export function findUserBySessionToken(db: DB, token: string): User | null {
 export function resolveSession(db: DB, token: string, requestId: string): User | null {
   const row = lookupSession(db, token);
   if (!row) return null;
-  if (Date.now() - Date.parse(row.last_seen_at) >= SESSION_TOUCH_INTERVAL_MS) {
-    db.transaction(() => {
-      const lastSeenAt = nowIso();
-      const res = db
-        .prepare("UPDATE sessions SET last_seen_at = ? WHERE id = ? AND last_seen_at = ?")
-        .run(lastSeenAt, row.session_id, row.last_seen_at);
-      if (res.changes === 0) return;
-      writeAudit(db, {
-        actorId: row.id,
-        action: "session.touch",
-        resourceType: "session",
-        resourceId: row.session_id.slice(0, 16),
-        before: { lastSeenAt: row.last_seen_at },
-        after: { lastSeenAt },
-        requestId,
-      });
-    })();
-  }
-  return toUser(row);
+  if (Date.now() - Date.parse(row.last_seen_at) < SESSION_TOUCH_INTERVAL_MS) return toUser(row);
+  return db.transaction((): User | null => {
+    const lastSeenAt = nowIso();
+    // Re-checks validity at write time: a session revoked or expired since the lookup is not revived.
+    const res = db
+      .prepare(
+        `UPDATE sessions SET last_seen_at = ?
+         WHERE id = ? AND last_seen_at = ? AND revoked_at IS NULL AND expires_at > ?`,
+      )
+      .run(lastSeenAt, row.session_id, row.last_seen_at, lastSeenAt);
+    if (res.changes === 0) {
+      // Either another request touched it first (still valid) or it was revoked/expired meanwhile.
+      const current = lookupSession(db, token);
+      return current ? toUser(current) : null;
+    }
+    writeAudit(db, {
+      actorId: row.id,
+      action: "session.touch",
+      resourceType: "session",
+      resourceId: row.session_id.slice(0, 16),
+      before: { lastSeenAt: row.last_seen_at },
+      after: { lastSeenAt },
+      requestId,
+    });
+    return toUser(row);
+  })();
 }
 
 export function revokeSession(db: DB, token: string, actorId: string, requestId: string): void {

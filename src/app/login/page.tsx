@@ -10,9 +10,21 @@ const DEMO_ACCOUNTS = [
   { email: "sam@acme.dev", role: "admin" },
 ];
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; reason?: string }> }) {
+type LoginSearchParams = { next?: string; reason?: string; error?: string; retry?: string };
+
+function loginError({ error, retry }: LoginSearchParams): string | undefined {
+  if (error === "invalid") return "Invalid email or password";
+  if (error === "locked") {
+    const minutes = Math.max(1, Number.parseInt(retry ?? "", 10) || 1);
+    return `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+  }
+  return undefined;
+}
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<LoginSearchParams> }) {
   if (await getCurrentUser()) redirect("/");
-  const { next, reason } = await searchParams;
+  const params = await searchParams;
+  const { next, reason } = params;
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
@@ -23,13 +35,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <h1 className="text-2xl font-semibold">Acme Internal Tools</h1>
           <p className="mt-1 text-sm text-slate-500">Sign in to view your tools and assignments</p>
         </div>
-        {reason === "expired" && (
+        {reason === "expired" && !params.error && (
           <p role="status" className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             Your session expired. Sign in again to continue where you left off.
           </p>
         )}
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <LoginForm next={safeNextPath(next)} />
+          <LoginForm next={safeNextPath(next)} error={loginError(params)} />
         </div>
         <div className="mt-6 rounded-lg border border-dashed border-slate-300 p-4 text-xs text-slate-500">
           <p className="mb-2 font-medium text-slate-600">Mock accounts (password: {DEMO_PASSWORD})</p>

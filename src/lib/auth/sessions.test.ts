@@ -90,10 +90,34 @@ describe("session lifecycle", () => {
     expect(resolveSession(db, token, "req")?.id).toBe("u_ava");
     const touches = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'session.touch'").get() as { n: number };
     expect(touches.n).toBe(1);
-    advance(SESSION_IDLE_TIMEOUT_MS - 60_000);
+    advance(SESSION_IDLE_TIMEOUT_MS + SESSION_TOUCH_INTERVAL_MS - 60_000);
     expect(findUserBySessionToken(db, token)?.id).toBe("u_ava");
     advance(120_000);
     expect(findUserBySessionToken(db, token)).toBeNull();
+  });
+
+  it("never expires before the full idle timeout of real inactivity", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { token } = createSession(db, "u_ava", "req");
+    advance(SESSION_TOUCH_INTERVAL_MS - 1000);
+    expect(resolveSession(db, token, "req")?.id).toBe("u_ava"); // not recorded: inside the touch interval
+    advance(SESSION_IDLE_TIMEOUT_MS - 1000);
+    expect(resolveSession(db, token, "req")?.id).toBe("u_ava");
+  });
+
+  it("does not revive a session revoked between lookup and touch", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { token } = createSession(db, "u_ava", "req");
+    advance(SESSION_TOUCH_INTERVAL_MS + 1000);
+    const prepare = db.prepare.bind(db);
+    vi.spyOn(db, "prepare").mockImplementation((sql: string) => {
+      if (sql.includes("SET last_seen_at")) revokeSession(db, token, "u_ava", "req-logout");
+      return prepare(sql);
+    });
+    expect(resolveSession(db, token, "req")).toBeNull();
+    vi.restoreAllMocks();
+    const touches = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'session.touch'").get() as { n: number };
+    expect(touches.n).toBe(0);
   });
 
   it("does not write on every request", () => {
@@ -117,7 +141,7 @@ describe("session lifecycle", () => {
   it("purges stale sessions on the next login, with an audit row", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     createSession(db, "u_ava", "req");
-    advance(SESSION_IDLE_TIMEOUT_MS + 1000);
+    advance(SESSION_IDLE_TIMEOUT_MS + SESSION_TOUCH_INTERVAL_MS + 1000);
     createSession(db, "u_ava", "req");
     const rows = db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE user_id = 'u_ava'").get() as { n: number };
     expect(rows.n).toBe(1);

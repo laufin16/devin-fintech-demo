@@ -1,12 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
-import { loginAction, type LoginState } from "./actions";
+import { useState } from "react";
 
-export function LoginForm({ next }: { next: string }) {
-  const [state, formAction, pending] = useActionState<LoginState, FormData>(loginAction, {});
+export function LoginForm({ next, error }: { next: string; error?: string }) {
+  const [pending, setPending] = useState(false);
   return (
-    <form action={formAction} className="space-y-4">
+    <form action="/api/auth/login" method="post" onSubmit={() => setPending(true)} className="space-y-4">
       <input type="hidden" name="next" value={next} />
       <label className="block">
         <span className="text-sm font-medium text-slate-700">Work email</span>
@@ -28,9 +27,9 @@ export function LoginForm({ next }: { next: string }) {
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
       </label>
-      {state.error && (
+      {error && (
         <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {state.error}
+          {error}
         </p>
       )}
       <button
