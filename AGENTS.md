@@ -23,7 +23,7 @@ These apply to every app built in the laufin16/devin-fintech-demo repo.
 The user confirmed these for the prototype. Revisit them before production.
 
 - **Roles stay `approver` and `admin`.** The KYC queue uses these two roles. Do not add KYC-specific roles.
-- **No second reviewer (maker-checker),** not even for high-risk KYC approvals.
+- **No second reviewer (maker-checker),** not even for high-risk KYC approvals, for the sake of the prototype.
 - **KYC gates refund payouts.** A refund payout requires the customer's KYC status to be approved. This is checked server-side in the same transaction as the payout.
 - **Only admins see unmasked PII.** Grant this through the policy file (e.g. a `kyc:view_pii` action held only by `admin`). Every other role sees masked values.
 
