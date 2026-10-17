@@ -1,7 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
-import { forbidden, redirect } from "next/navigation";
+import { forbidden, redirect, unauthorized } from "next/navigation";
 import { getDb } from "../db";
 import { can, type Action } from "../policy";
 import type { User } from "../types";
@@ -36,7 +36,9 @@ export async function requirePermission(action: Action): Promise<User> {
   return user;
 }
 
+// For server actions: an expired or revoked session gets HTTP 401 (unauthorized.tsx), not a redirect.
 export async function requireActionContext(): Promise<{ user: User; requestId: string }> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) unauthorized();
   return { user, requestId: await getRequestId() };
 }
