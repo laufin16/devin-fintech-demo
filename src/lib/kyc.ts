@@ -445,3 +445,87 @@ export function decideCase(
     note: { kind: "decision", body: `${input.decision === "approve" ? "Approved" : "Rejected"}: ${reason}` },
   });
 }
+
+export const MAX_HELP_NOTE_LENGTH = 500;
+
+export interface HelpRequest {
+  id: number;
+  senderName: string;
+  recipientName: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface Colleague {
+  id: string;
+  name: string;
+  role: User["role"];
+}
+
+// Coworkers who could help on a KYC case: everyone else who can view KYC cases.
+export function listHelpColleagues(db: DB, user: User): Colleague[] {
+  authorize(user, "kyc:request_help");
+  const rows = db.prepare("SELECT id, name, role FROM users WHERE id != ? ORDER BY name").all(user.id) as Colleague[];
+  return rows.filter((u) => can(u, "kyc:view"));
+}
+
+export function listHelpRequests(db: DB, user: User, caseId: string): HelpRequest[] {
+  authorize(user, "kyc:view");
+  return db
+    .prepare(
+      `SELECT m.id, s.name AS senderName, r.name AS recipientName, m.text, m.created_at AS createdAt
+       FROM slack_messages m JOIN users s ON s.id = m.sender_id JOIN users r ON r.id = m.recipient_id
+       WHERE m.resource_type = 'kyc_case' AND m.resource_id = ? ORDER BY m.id DESC`,
+    )
+    .all(caseId) as HelpRequest[];
+}
+
+// Sends a (mock) Slack DM asking a coworker for help. The message carries only the case id, status,
+// risk, link and the sender's note, never PII; the audit row references the message id, not its text.
+export function requestKycHelp(
+  db: DB,
+  user: User,
+  input: { caseId: string; recipientId: string; note: string; requestId: string },
+): HelpRequest {
+  authorize(user, "kyc:request_help");
+  const note = input.note.trim();
+  if (!note) throw new ValidationError("Say what you need help with");
+  if (note.length > MAX_HELP_NOTE_LENGTH) {
+    throw new ValidationError(`Note must be ${MAX_HELP_NOTE_LENGTH} characters or fewer`);
+  }
+  if (input.recipientId === user.id) throw new ValidationError("Pick a coworker other than yourself");
+
+  return db
+    .transaction(() => {
+      const kyc = loadCase(db, input.caseId);
+      if (!isOpen(kyc.status)) throw new ConflictError(`Case is ${kyc.status}; help can only be requested on open cases`);
+      const recipient = db.prepare("SELECT id, name, role FROM users WHERE id = ?").get(input.recipientId) as
+        | Colleague
+        | undefined;
+      if (!recipient || !can(recipient, "kyc:view")) throw new ValidationError("Pick a coworker who can review KYC cases");
+
+      const text =
+        `${user.name} needs help with KYC case ${kyc.id} (${kyc.risk_level} risk, ${kyc.status.replace("_", " ")}): ` +
+        `"${note}" — /kyc/${kyc.id}`;
+      const createdAt = nowIso();
+      const id = Number(
+        db
+          .prepare(
+            `INSERT INTO slack_messages (sender_id, recipient_id, resource_type, resource_id, text, created_at)
+             VALUES (?, ?, 'kyc_case', ?, ?, ?)`,
+          )
+          .run(user.id, recipient.id, kyc.id, text, createdAt).lastInsertRowid,
+      );
+      writeAudit(db, {
+        actorId: user.id,
+        action: "kyc.request_help",
+        resourceType: "kyc_case",
+        resourceId: kyc.id,
+        before: null,
+        after: { slackMessageId: id, recipientId: recipient.id, channel: "slack_dm_mock" },
+        requestId: input.requestId,
+      });
+      return { id, senderName: user.name, recipientName: recipient.name, text, createdAt };
+    })
+    .immediate();
+}

@@ -19,7 +19,7 @@ describe("policy", () => {
 
   it("lets both roles review KYC, but only admins decide escalations and see unmasked PII", () => {
     for (const role of ["approver", "admin"] as const) {
-      for (const action of ["kyc:view", "kyc:claim", "kyc:request_info", "kyc:escalate", "kyc:approve", "kyc:reject"] as const) {
+      for (const action of ["kyc:view", "kyc:claim", "kyc:request_info", "kyc:escalate", "kyc:approve", "kyc:reject", "kyc:request_help"] as const) {
         expect(can({ role }, action)).toBe(true);
       }
     }
