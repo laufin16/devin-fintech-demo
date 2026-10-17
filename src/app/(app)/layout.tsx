@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/current";
 import { can } from "@/lib/policy";
+import { TOOLS } from "@/lib/tools";
 import { logoutAction, logoutEverywhereAction } from "../actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -15,8 +16,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </Link>
           <nav className="flex gap-4 text-sm text-slate-600">
             <Link href="/" className="hover:text-slate-900">Home</Link>
-            {can(user, "refund:view") && <Link href="/refunds" className="hover:text-slate-900">Refunds</Link>}
-            {can(user, "audit:view") && <Link href="/audit" className="hover:text-slate-900">Audit log</Link>}
+            {TOOLS.filter((t) => can(user, t.requires)).map((t) => (
+              <Link key={t.href} href={t.href} className="hover:text-slate-900">{t.navLabel}</Link>
+            ))}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className="text-slate-700">{user.name}</span>

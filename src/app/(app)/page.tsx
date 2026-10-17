@@ -14,7 +14,10 @@ export default async function HomePage() {
   const db = getDb();
   const tools = TOOLS.filter((t) => can(user, t.requires));
   const assignments = can(user, "refund:view") ? listAssignments(db, user) : [];
-  const counts = can(user, "refund:view") ? countRefundsByStatus(db, user) : null;
+  const refundCounts = can(user, "refund:view") ? countRefundsByStatus(db, user) : null;
+  const toolStats: Record<string, string | undefined> = {
+    "/refunds": refundCounts ? `${refundCounts.pending} pending · ${refundCounts.approved} awaiting payout` : undefined,
+  };
 
   return (
     <div className="space-y-10">
@@ -34,11 +37,7 @@ export default async function HomePage() {
             >
               <h3 className="font-medium">{t.name}</h3>
               <p className="mt-1 text-sm text-slate-500">{t.description}</p>
-              {t.href === "/refunds" && counts && (
-                <p className="mt-3 text-xs text-slate-500">
-                  {counts.pending} pending · {counts.approved} awaiting payout
-                </p>
-              )}
+              {toolStats[t.href] && <p className="mt-3 text-xs text-slate-500">{toolStats[t.href]}</p>}
             </Link>
           ))}
         </div>
