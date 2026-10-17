@@ -7,6 +7,7 @@ export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-request-id", crypto.randomUUID());
+  requestHeaders.set("x-pathname", pathname + search);
 
   if (!PUBLIC_PATHS.includes(pathname) && !req.cookies.has(SESSION_COOKIE)) {
     if (pathname.startsWith("/api/")) {

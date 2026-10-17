@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_id TEXT NOT NULL REFERENCES users(id),
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
-  revoked_at TEXT
+  revoked_at TEXT,
+  last_seen_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS customers (
@@ -84,6 +85,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
   request_id TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS audit_log_resource ON audit_log(resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS audit_log_action ON audit_log(action, resource_id);
 
 CREATE TRIGGER IF NOT EXISTS audit_log_no_update BEFORE UPDATE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;

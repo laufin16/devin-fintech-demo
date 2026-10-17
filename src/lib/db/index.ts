@@ -12,10 +12,20 @@ export function createDb(file: string): DB {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.pragma("busy_timeout = 5000");
+  migrate(db);
   db.exec(SCHEMA_SQL);
   const { n } = db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
   if (n === 0) seed(db);
   return db;
+}
+
+// Upgrades databases created before a column existed. CREATE TABLE IF NOT EXISTS won't add columns.
+function migrate(db: DB) {
+  const cols = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+  if (cols.length > 0 && !cols.some((c) => c.name === "last_seen_at")) {
+    db.exec("ALTER TABLE sessions ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''");
+    db.exec("UPDATE sessions SET last_seen_at = created_at");
+  }
 }
 
 const globalForDb = globalThis as unknown as { __db?: DB };
