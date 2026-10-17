@@ -36,7 +36,8 @@ export async function requirePermission(action: Action): Promise<User> {
   return user;
 }
 
-// For server actions: an expired or revoked session gets HTTP 401 (unauthorized.tsx), not a redirect.
+// For server actions: an expired or revoked session gets HTTP 401. In the browser the (app) layout's
+// requireUser() then lands the user on the expired-session login; unauthorized.tsx is the fallback.
 export async function requireActionContext(): Promise<{ user: User; requestId: string }> {
   const user = await getCurrentUser();
   if (!user) unauthorized();
