@@ -1,20 +1,17 @@
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
-import { requireUser } from "@/lib/auth/current";
+import { requirePermission } from "@/lib/auth/current";
 import { getDb } from "@/lib/db";
 import { formatCents } from "@/lib/money";
-import { can } from "@/lib/policy";
 import { actionItemFor, countRefundsByStatus, listRefunds } from "@/lib/refunds";
 import type { RefundStatus } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
-import { Forbidden } from "@/components/forbidden";
 import { RefundActions } from "./refund-actions";
 
 const STATUSES: RefundStatus[] = ["pending", "approved", "rejected", "processed"];
 
 export default async function RefundsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  const user = await requireUser();
-  if (!can(user, "refund:view")) return <Forbidden />;
+  const user = await requirePermission("refund:view");
   const db = getDb();
   const { status: rawStatus } = await searchParams;
   const status = STATUSES.find((s) => s === rawStatus);
