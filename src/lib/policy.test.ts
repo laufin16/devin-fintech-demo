@@ -17,6 +17,18 @@ describe("policy", () => {
     expect(can({ role: "admin" }, "audit:view")).toBe(true);
   });
 
+  it("lets both roles review KYC, but only admins decide escalations and see unmasked PII", () => {
+    for (const role of ["approver", "admin"] as const) {
+      for (const action of ["kyc:view", "kyc:claim", "kyc:request_info", "kyc:escalate", "kyc:approve", "kyc:reject"] as const) {
+        expect(can({ role }, action)).toBe(true);
+      }
+    }
+    expect(can({ role: "approver" }, "kyc:view_pii")).toBe(false);
+    expect(can({ role: "approver" }, "kyc:decide_escalated")).toBe(false);
+    expect(can({ role: "admin" }, "kyc:view_pii")).toBe(true);
+    expect(can({ role: "admin" }, "kyc:decide_escalated")).toBe(true);
+  });
+
   it("denies by default", () => {
     expect(can(null, "refund:view")).toBe(false);
     expect(can({ role: "intern" as Role }, "refund:view")).toBe(false);

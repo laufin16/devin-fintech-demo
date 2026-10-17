@@ -3,13 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import { requireActionContext } from "@/lib/auth/current";
-import { AppError } from "@/lib/errors";
+import { actionErrorState, type ActionState } from "@/lib/action-state";
 import { decideRefund, processRefund } from "@/lib/refunds";
 
-export interface RefundActionState {
-  error?: string;
-  message?: string;
-}
+export type RefundActionState = ActionState;
 
 export async function refundAction(_prev: RefundActionState, formData: FormData): Promise<RefundActionState> {
   const { user, requestId } = await requireActionContext();
@@ -35,10 +32,7 @@ export async function refundAction(_prev: RefundActionState, formData: FormData)
       return { error: "Unknown action" };
     }
   } catch (err) {
-    if (err instanceof AppError) return { error: err.message };
-    // Each refund mutation runs in a single transaction, so a throw here means it rolled back.
-    console.error(`refundAction failed (request ${requestId})`, err);
-    return { error: `Something went wrong (request ${requestId.slice(0, 8)}). No changes were saved.` };
+    return actionErrorState(err, requestId, "refundAction");
   }
 
   revalidatePath("/", "layout");

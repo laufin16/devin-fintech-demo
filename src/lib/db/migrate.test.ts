@@ -52,3 +52,18 @@ it("adds sessions.last_seen_at to old databases without signing out live session
   expect(n.n).toBe(3);
   reopened.close();
 });
+
+it("backfills KYC data into databases created before the KYC queue, with an audit row", () => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "migrate-"));
+  const file = path.join(dir, "pre-kyc.db");
+  createDb(file).close();
+  const old = new Database(file);
+  old.exec("DROP TABLE kyc_notes; DROP TABLE kyc_checks; DROP TABLE kyc_documents; DROP TABLE kyc_cases;");
+  old.close();
+
+  const db = createDb(file);
+  expect(db.prepare("SELECT COUNT(*) AS n FROM kyc_cases").get()).toEqual({ n: 8 });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'system.seed_kyc'").get()).toEqual({ n: 2 });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM refunds").get()).toEqual({ n: 8 });
+  db.close();
+});

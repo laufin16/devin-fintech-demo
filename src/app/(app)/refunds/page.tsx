@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth/current";
 import { getDb } from "@/lib/db";
 import { formatCents } from "@/lib/money";
-import { actionItemFor, countRefundsByStatus, listRefunds } from "@/lib/refunds";
+import { actionItemFor, countRefundsByStatus, listRefunds, payoutBlockedReason } from "@/lib/refunds";
 import type { RefundStatus } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
 import { RefundActions } from "./refund-actions";
@@ -83,6 +83,8 @@ export default async function RefundsPage({ searchParams }: { searchParams: Prom
                         intents={item.intents}
                         amountLabel={formatCents(r.amount_cents, r.currency)}
                       />
+                    ) : payoutBlockedReason(r) ? (
+                      <span className="text-xs text-amber-700">{payoutBlockedReason(r)}</span>
                     ) : (
                       <span className="text-xs text-slate-400">
                         {r.status === "approved" ? "Awaiting admin payout" : "No action needed"}
