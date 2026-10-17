@@ -11,14 +11,14 @@ export interface Tool {
 export const TOOLS: Tool[] = [
   {
     href: "/refunds",
-    name: "Refund dashboard",
+    name: "Refund Dashboard",
     navLabel: "Refunds",
     description: "Review refund requests, approve or reject them, and issue payouts.",
     requires: "refund:view",
   },
   {
     href: "/kyc",
-    name: "KYC review queue",
+    name: "KYC Review Queue",
     navLabel: "KYC",
     description: "Claim and review customer identity checks. Refund payouts need an approved KYC.",
     requires: "kyc:view",

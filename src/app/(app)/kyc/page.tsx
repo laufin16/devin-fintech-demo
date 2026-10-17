@@ -34,7 +34,7 @@ export default async function KycQueuePage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">KYC review queue</h1>
+        <h1 className="text-2xl font-semibold">KYC Review Queue</h1>
         <p className="mt-1 text-sm text-slate-500">
           {stats.open} open · {stats.overdue} past SLA. Sorted by SLA, then risk. A customer&apos;s refunds can only be
           paid out once their KYC is approved.
